@@ -1,10 +1,11 @@
 from typing import Optional
-
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.author_client import get_author_fetcher
 from app.database import engine, get_db
 from app.models import Base, BookDB
 from app.schemas import BookCreate, BookRead, BookUpdate
@@ -67,3 +68,14 @@ def delete_book(book_id: int, db: Session = Depends(get_db)):
     db.delete(db_book)
     db.commit()
 
+
+@app.get("/api/authors/{slug}")
+def get_author(slug: str, fetcher=Depends(get_author_fetcher)):
+    try:
+        return fetcher(slug)
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Author not found") from exc
+        raise HTTPException(status_code=502, detail="Author service error") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail="Author service unavailable") from exc
